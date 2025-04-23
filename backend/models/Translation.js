@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { DOMAINS } = require('../config/constants');
+// const { DOMAINS } = require('../config/constants');
 
 const translationSchema = new mongoose.Schema({
   originalText: {

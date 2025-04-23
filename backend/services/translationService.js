@@ -1,23 +1,30 @@
+require('dotenv').config();
 const axios = require('axios');
 
-// For production - using Google Cloud Translation API
-const translateWithGoogle = async (text, targetLang = 'hi') => {
+// Function to interact with the LibreTranslate API
+const translateWithLibreTranslate = async (text, targetLang = 'hi', sourceLang = 'en') => {
   try {
-    const response = await axios.post(
-      `https://translation.googleapis.com/language/translate/v2?key=${process.env.GOOGLE_API_KEY}`,
-      {
-        q: text,
-        target: targetLang
-      }
-    );
-    return response.data.data.translations[0].translatedText;
+    const apiUrl = process.env.LIBRE_TRANSLATE_API_URL || 'https://libretranslate.com/translate'; // Use env variable for flexibility
+
+    // Sending request to the LibreTranslate API
+    const response = await axios.post(apiUrl, {
+      q: text,
+      source_language: sourceLang,
+      target_language: targetLang
+    }, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    console.log("Translation Response:", response.data);  // Log the response for debugging
+
+    return response.data.translatedText;  // Ensure this matches the actual response structure
   } catch (error) {
-    console.error('Google Translate error:', error);
-    throw error;
+    console.error('Translation API error:', error);
+    throw error;  // Throw error to fallback if API fails
   }
 };
 
-// Fallback mock translation
+// Fallback mock translation if the API fails
 const mockTranslate = (text, domain = 'common') => {
   const translations = {
     common: "यह एक सामान्य प्रशासनिक पाठ का अनुवाद है।",
@@ -25,16 +32,20 @@ const mockTranslate = (text, domain = 'common') => {
     healthcare: "स्वास्थ्य सेवा संबंधी शब्दावली के साथ अनुवाद।",
     legal: "कानूनी दस्तावेज़ के लिए प्रमाणित अनुवाद।"
   };
+
+  console.warn(`Fallback translation for domain '${domain}'`);
+
   return translations[domain] || translations.common;
 };
 
-exports.translateText = async (text, domain) => {
-  if (process.env.NODE_ENV === 'production') {
-    try {
-      return await translateWithGoogle(text);
-    } catch {
-      return mockTranslate(text, domain);
-    }
+// Main translation function
+exports.translateText = async (text, domain = 'common') => {
+  try {
+    console.log(`Attempting to translate text in domain '${domain}': ${text}`);
+
+    return await translateWithLibreTranslate(text);
+  } catch (err) {
+    console.error('Translation error (using fallback):', err);
+    return mockTranslate(text, domain);  // Return mock translation if API fails
   }
-  return mockTranslate(text, domain);
 };

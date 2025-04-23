@@ -1,9 +1,22 @@
+require('dotenv').config();
+const uri = process.env.MONGODB_URI;
 const app = require('./app');
-const http = require('http');
-const { PORT } = require('./config/constants');
+// const connectDB = require('./config/db');
 
-const server = http.createServer(app);
+const PORT = process.env.PORT || 5004;
+console.log('Using port:', PORT);
+console.log('MongoDB URI:', uri);
 
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// connectDB()
+//   .then(() => {
+//     app.listen(PORT, () => {
+//       console.log(`🚀 Server is running on port ${PORT}`); // Fix: Wrap the message inside backticks
+//     });
+//   })
+//   .catch(err => {
+//     console.error('MongoDB connection error:', err);
+//   });
+
+app.listen(PORT, () => {
+  console.log(`🚀 Server is running on port ${PORT}`); // Fix: Wrap the message inside backticks
 });

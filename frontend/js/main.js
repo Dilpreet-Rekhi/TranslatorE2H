@@ -13,8 +13,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const apiStatus = document.getElementById('apiStatus');
 
     // API Configuration
-    const API_ENDPOINT = 'api/translate.php';
-    const API_KEY = 'EDU_2024';
+    const API_ENDPOINT = 'http://localhost:5000/translate'; // ✅ correct
+
+    // const API_KEY = 'EDU_2024';
 
     // Character Counter
     inputText.addEventListener('input', function() {
@@ -27,37 +28,32 @@ document.addEventListener('DOMContentLoaded', function() {
     // Translation Function
     async function translateText() {
         const text = inputText.value.trim();
-        const domain = domainSelect.value;
-        
         if (!text) {
             alert('Please enter text to translate');
             return;
         }
-
+    
         translateBtn.disabled = true;
         loaderIcon.classList.remove('hidden');
         outputText.innerHTML = '<p class="text-gray-500">Translating...</p>';
-
+    
         try {
-            const response = await fetch(API_ENDPOINT, {
+            const response = await fetch('http://localhost:5000/translate', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-KEY': API_KEY
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    text: text,
-                    domain: domain
+                    q: text,
+                    source: 'en',
+                    target: 'hi',
+                    format: 'text'
                 })
             });
-
+    
             const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.error || 'Translation failed');
-            }
-
             outputText.innerHTML = `<p class="leading-relaxed">${data.translatedText}</p>`;
+    
             apiStatus.textContent = 'API Connected';
             apiStatus.previousElementSibling.className = 'inline-block w-3 h-3 rounded-full bg-green-500 mr-2';
         } catch (error) {
@@ -70,6 +66,7 @@ document.addEventListener('DOMContentLoaded', function() {
             loaderIcon.classList.add('hidden');
         }
     }
+    
 
     // Event Listeners
     translateBtn.addEventListener('click', translateText);
@@ -99,9 +96,29 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    saveBtn.addEventListener('click', function() {
-        alert('PDF export would be implemented in production\nusing libraries like jsPDF or window.print()');
-    });
+    saveBtn.addEventListener("click", () => {
+        const translatedTextContent = translatedTextDiv.innerText.trim();
+      
+        if (!translatedTextContent || translatedTextContent === "Translated Hindi text will appear here...") {
+          alert("No translated text to save as PDF!");
+          return;
+        }
+      
+        const { jsPDF } = window.jspdf;  // Ensure jsPDF is available
+        const doc = new jsPDF();
+        
+        // Set font and size
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(14);
+        
+        // Add text to the PDF
+        doc.text("Translated Hindi Text", 10, 10);  // Title or heading
+        doc.text(translatedTextContent, 10, 20);  // Actual translated content
+      
+        // Save the PDF as a file
+        doc.save("translated_text.pdf");
+      });
+      
 
     inputText.addEventListener('keydown', function(e) {
         if (e.ctrlKey && e.key === 'Enter') {

@@ -1,167 +1,83 @@
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
 const User = require('../models/User');
-const { sendEmail } = require('../services/email');
-const { ROLES } = require('../config/constants');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
-// Secure token generation
-const generateToken = () => crypto.randomBytes(32).toString('hex');
+// User Registration
+exports.registerUser = async (req, res) => {
+  const { username, email, password } = req.body;
 
-// Token verification wrapper
-const verifyToken = (token) => {
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET, {
-      issuer: process.env.JWT_ISSUER,
-      audience: process.env.JWT_AUDIENCE
-    });
-  } catch (err) {
-    throw new Error('Invalid or expired token');
+  if (!username || !email || !password) {
+    return res.status(400).json({ success: false, error: 'All fields are required.' });
   }
-};
 
-exports.register = async (req, res) => {
   try {
-    const { officialId, email, department, password } = req.body;
-
-    // Validate input
-    if (!/^[A-Z]{2}\d{6}$/.test(officialId)) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Invalid official ID format (e.g. MH123456)'
-      });
-    }
-
-    // Check existing user
-    const existingUser = await User.findOne({ $or: [{ officialId }, { email }] });
+    // Check if the email already exists
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(409).json({ 
-        success: false,
-        error: 'User already exists'
-      });
+      return res.status(409).json({ success: false, error: 'Email already registered.' });
     }
 
-    // Create user
-    const user = new User({
-      officialId,
-      email,
-      department,
-      password,
-      role: ROLES.USER,
-      verificationToken: generateToken(),
-      verificationExpires: Date.now() + 86400000 // 24 hours
-    });
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new User({ username, email, password: hashedPassword });
 
-    await user.save();
+    // Save the new user to the database
+    await newUser.save();
+    res.status(201).json({ success: true, message: 'User registered successfully.' });
 
-    // Send verification email
-    const verificationUrl = `${process.env.FRONTEND_URL}/verify-email?token=${user.verificationToken}`;
-    await sendEmail({
-      to: email,
-      subject: 'Verify Your Email - राजभाषा अनुवादक',
-      html: `Email verification link: <a href="${verificationUrl}">Verify</a>`
-    });
-
-    res.status(201).json({ 
-      success: true,
-      message: 'Registration successful. Please verify your email.'
-    });
-
-  } catch (err) {
-    console.error('Registration error:', err);
-    res.status(500).json({ 
-      success: false,
-      error: 'Internal server error'
-    });
+  } catch (error) {
+    console.error('Register Error:', error.message);
+    res.status(500).json({ success: false, error: 'Server error during registration.' });
   }
 };
 
-exports.verifyEmail = async (req, res) => {
-  try {
-    const { token } = req.query;
-    const user = await User.findOneAndUpdate(
-      { 
-        verificationToken: token,
-        verificationExpires: { $gt: Date.now() }
-      },
-      { 
-        isVerified: true,
-        $unset: { 
-          verificationToken: 1,
-          verificationExpires: 1 
-        }
-      }
-    );
+// User Login
+exports.loginUser = async (req, res) => {
+  console.log('Login request body:', req.body);
+  const { email, password } = req.body;
+  
+  if (!email || !password) {
+    return res.status(400).json({ success: false, error: 'Email and password are required.' });
+  }
 
+  try {
+    // Check if the user exists
+    console.log("Login request received:", req.body);
+    const user = await User.findOne({ email });
+    console.log("User found:", user);
     if (!user) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Invalid or expired token'
-      });
+      return res.status(401).json({ success: false, error: 'Invalid email or password.' });
     }
 
-    res.json({ 
-      success: true,
-      message: 'Email verified successfully'
-    });
-
-  } catch (err) {
-    console.error('Verification error:', err);
-    res.status(500).json({ 
-      success: false,
-      error: 'Internal server error'
-    });
-  }
-};
-
-exports.login = async (req, res) => {
-  try {
-    const { officialId, password } = req.body;
-    const user = await User.findOne({ officialId }).select('+password +loginAttempts');
-
-    // Validate user
-    if (!user || !(await user.comparePassword(password))) {
-      user.loginAttempts += 1;
-      await user.save();
-      return res.status(401).json({ 
-        success: false,
-        error: 'Invalid credentials'
-      });
+    // Compare provided password with the stored hashed password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, error: 'Invalid email or password.' });
     }
 
-    // Reset attempts
-    user.loginAttempts = 0;
-    user.lastLogin = new Date();
-    await user.save();
-
-    // Generate JWT
+    // Create a JWT token
     const token = jwt.sign(
-      { 
+      {
         id: user._id,
-        role: user.role 
+        email: user.email,
       },
       process.env.JWT_SECRET,
-      { 
-        expiresIn: process.env.JWT_EXPIRES_IN,
-        issuer: process.env.JWT_ISSUER,
-        audience: process.env.JWT_AUDIENCE
+      {
+        expiresIn: process.env.JWT_EXPIRATION || "1h",
+        issuer: process.env.JWT_ISSUER || "rajbhasa-translator",
+        audience: process.env.JWT_AUDIENCE || "users",
       }
     );
 
-    res.json({ 
+    // Send response with the token
+    return res.status(200).json({
       success: true,
-      token,
-      user: {
-        id: user._id,
-        officialId: user.officialId,
-        role: user.role
-      }
+      message: 'Login successful.',
+      token
     });
 
-  } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ 
-      success: false,
-      error: 'Internal server error'
-    });
+  } catch (error) {
+    console.error('Login Error:', error);    
+    return res.status(500).json({ success: false, error: 'Server error during login.' });
   }
 };

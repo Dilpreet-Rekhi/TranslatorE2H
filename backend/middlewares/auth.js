@@ -1,57 +1,46 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+// Middleware to verify JWT token and attach user to request
 exports.authenticate = async (req, res, next) => {
   try {
-    // Get token from header or cookie
-    const token = req.cookies.token || 
-                 req.header('Authorization')?.replace('Bearer ', '');
-
-    if (!token) {
-      return res.status(401).json({ 
+    const authHeader = req.header('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
         success: false,
-        error: 'Authentication required' 
+        error: 'Authentication token missing or malformed.'
       });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET, {
-      issuer: process.env.JWT_ISSUER,
-      audience: process.env.JWT_AUDIENCE
-    });
+    const token = authHeader.replace('Bearer ', '');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Check user exists
     const user = await User.findById(decoded.id);
     if (!user) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false,
-        error: 'User not found' 
+        error: 'User not found.'
       });
     }
 
-    req.user = user;
+    req.user = user; // Attach user to request
     next();
-
   } catch (err) {
-    console.error('Authentication error:', err);
-    
-    let error = 'Authentication failed';
-    if (err.name === 'TokenExpiredError') error = 'Session expired';
-    if (err.name === 'JsonWebTokenError') error = 'Invalid token';
-
-    res.status(401).json({ 
+    console.error('Authentication error:', err.message);
+    res.status(401).json({
       success: false,
-      error 
+      error: 'Invalid or expired token. Please authenticate again.'
     });
   }
 };
 
+// Role-based authorization middleware
 exports.authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         success: false,
-        error: 'Unauthorized access' 
+        error: 'You do not have permission to perform this action.'
       });
     }
     next();
